@@ -1,6 +1,6 @@
 # 中国大学MOOC 拖拽上传附件脚本
 
-一个简单易用的油猴脚本，为中国大学MOOC作业页面添加拖拽上传附件功能。
+一个简单易用的油猴脚本，为中国大学MOOC作业页面添加拖拽上传附件功能。脚本地址：[MOOC DropUploader](https://greasyfork.org/zh-CN/scripts/558305-%E4%B8%AD%E5%9B%BD%E5%A4%A7%E5%AD%A6mooc-%E6%8B%96%E6%8B%BD%E4%B8%8A%E4%BC%A0%E9%99%84%E4%BB%B6-mooc-dropuploader)
 
 ## 功能
 
