@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         中国大学MOOC 拖拽上传附件
 // @namespace    http://tampermonkey.net/
-// @version      1.0.0
-// @description  为中国大学MOOC作业页面添加拖拽上传附件功能
+// @version      1.1.0
+// @description  为中国大学MOOC作业页面添加拖拽上传附件功能，支持粘贴图片上传
 // @author       失意
 // @match        https://www.icourse163.org/learn/*
 // @match        https://www.icourse163.org/spoc/learn/*
@@ -337,6 +337,144 @@
         }
     };
 
+    // 将图片插入到编辑器中
+    const insertImageToEditor = (imageUrl) => {
+        try {
+            // 查找 Quill 编辑器
+            const editor = document.querySelector('.ql-editor');
+            if (!editor) {
+                console.log('[MOOC DropUploader] 未找到编辑器');
+                return false;
+            }
+
+            // 创建图片元素
+            const img = document.createElement('img');
+            img.src = imageUrl;
+            img.style.maxWidth = '100%';
+
+            // 获取当前光标位置或在末尾插入
+            const selection = window.getSelection();
+            if (selection && selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                // 确保range在编辑器内
+                if (editor.contains(range.commonAncestorContainer)) {
+                    range.deleteContents();
+                    range.insertNode(img);
+                    // 在图片后添加换行
+                    const br = document.createElement('br');
+                    range.collapse(false);
+                    range.insertNode(br);
+                    range.setStartAfter(br);
+                    range.collapse(true);
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                    return true;
+                }
+            }
+
+            // 如果没有光标位置，在末尾插入
+            editor.appendChild(img);
+            editor.appendChild(document.createElement('br'));
+            return true;
+        } catch (error) {
+            console.error('[MOOC DropUploader] 插入图片失败:', error);
+            return false;
+        }
+    };
+
+    // 上传图片并获取URL
+    const uploadImage = async (file) => {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const response = await fetch(CONFIG.uploadUrl, {
+                method: 'POST',
+                body: formData,
+                credentials: 'include'
+            });
+
+            if (!response.ok) {
+                throw new Error(`Upload failed: ${response.status}`);
+            }
+
+            const result = await response.json();
+            // 根据MOOC的返回格式调整
+            return result.url || result.data?.url || result;
+        } catch (error) {
+            console.error('[MOOC DropUploader] 上传失败:', error);
+            throw error;
+        }
+    };
+
+    // 处理粘贴的图片
+    const handlePastedImage = async (items) => {
+        for (const item of items) {
+            if (item.type.indexOf('image') !== -1) {
+                const blob = item.getAsFile();
+                if (blob) {
+                    // 生成文件名
+                    const timestamp = new Date().getTime();
+                    const ext = blob.type.split('/')[1] || 'png';
+                    const fileName = `pasted-image-${timestamp}.${ext}`;
+
+                    // 创建File对象
+                    const file = new File([blob], fileName, { type: blob.type });
+
+                    console.log('[MOOC DropUploader] 检测到粘贴图片:', fileName);
+
+                    try {
+                        showToast('正在上传图片...', 'info');
+                        const imageUrl = await uploadImage(file);
+
+                        if (imageUrl && insertImageToEditor(imageUrl)) {
+                            showToast('图片插入成功！', 'success');
+                        } else {
+                            showToast('图片插入失败', 'error');
+                        }
+                    } catch (error) {
+                        showToast('图片上传失败', 'error');
+                        console.error('[MOOC DropUploader] 处理失败:', error);
+                    }
+
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    // 初始化粘贴功能
+    const initPaste = () => {
+        document.addEventListener('paste', async (e) => {
+            // 检查是否在作业编辑器中
+            const editor = document.querySelector('.ql-editor');
+            if (!editor) {
+                return;
+            }
+
+            // 检查焦点是否在编辑器内
+            const activeElement = document.activeElement;
+            if (!editor.contains(activeElement) && activeElement !== editor) {
+                return;
+            }
+
+            const items = e.clipboardData?.items;
+            if (!items) return;
+
+            // 转换为数组并处理
+            const itemsArray = Array.from(items);
+            const hasImage = await handlePastedImage(itemsArray);
+
+            if (hasImage) {
+                // 如果处理了图片，阻止默认行为
+                e.preventDefault();
+            }
+        });
+
+        console.log('[MOOC DropUploader] 粘贴上传功能已启用');
+    };
+
     // 初始化拖拽功能
     const initDragDrop = () => {
         const overlay = createDropOverlay();
@@ -440,10 +578,12 @@
         setTimeout(() => {
             injectStyles();
             initDragDrop();
+            initPaste();
 
             // 添加快捷键提示
             console.log('[MOOC DropUploader] 中国大学MOOC拖拽上传脚本已加载');
             console.log('[MOOC DropUploader] 直接将文件拖拽到页面即可上传附件');
+            console.log('[MOOC DropUploader] 也可以直接在填写框内粘贴图片上传');
         }, 1000);
     };
 
